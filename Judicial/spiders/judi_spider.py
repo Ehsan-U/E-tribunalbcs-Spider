@@ -36,6 +36,7 @@ class JudiSpider(scrapy.Spider):
         "mulege":"V5418"
     }
     daily = False
+    goto_flag = True
 
     def start_requests(self):
         
@@ -72,7 +73,7 @@ class JudiSpider(scrapy.Spider):
             # lapaz+8039, lopaz+8040 etc
             day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
             if not day_id in self.days_gone:
-                print(day_id)
+                self.days_gone.append(day_id)
                 self.local_db.write(f"{day_id}\n")
                 payload = self.prepare_post(sel, day=day)
                 yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent, "fecha":date_})
@@ -85,7 +86,7 @@ class JudiSpider(scrapy.Spider):
             if payload:
                 yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
             else:
-                print(f"\n[+] Ends on {entidad}")
+                print("\n[+] Must be end.")
 
     def parse_day(self, response, juz_mat_ent, fecha):
         fecha, fecha_insercion, fecha_tecnica = self.create_fechas(fecha)
@@ -242,12 +243,14 @@ class JudiSpider(scrapy.Spider):
             loader.add_value('origen',value='PODER JUDICIAL DEL ESTADO DE BAJA CALIFORNIA SUR')
             loader.add_value('fecha_insercion',value=fecha_insercion)
             loader.add_value('fecha_tecnica',value=fecha_tecnica)
+
             yield loader.load_item()
+        print(f" [+] {fecha}")
 
     def prepare_post(self, sel, entidad=None,day=None):
         if day:
             day_id = re.search(r"(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
-        else:
+        elif entidad:
             previous_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
             day_id = re.search(r"(?:')(V[0-9].*)(?:')", previous_month_id).group(1)
             if self.start_dates[entidad.lower()] == day_id:

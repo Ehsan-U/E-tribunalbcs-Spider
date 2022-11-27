@@ -13,12 +13,8 @@ class Mongo_Pipeline(object):
     collection = 'test'
 
     def __init__(self):
-        self.MONGODB_HOST = '104.225.140.236'
-        self.MONGODB_PORT = '27017'
-        self.MONGODB_USER = 'Pad36'
-        self.MONGODB_PASS = '3ioM6HY8WUHKJqR4'
         # self.mongo_url = "mongodb://localhost:27017"
-        self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        self.mongo_url = 'mongodb+srv://window:VYEubgqPlDsQwwoZ@cluster1.409m5rv.mongodb.net/?retryWrites=true&w=majority'
         self.mongo_db = 'testdb'
 
     def open_spider(self, spider):
@@ -40,3 +36,4 @@ class Mongo_Pipeline(object):
         else:
             self.db[self.collection].insert_one(dict(item))
             return item
+

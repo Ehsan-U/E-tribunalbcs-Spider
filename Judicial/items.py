@@ -3,19 +3,21 @@
 # See documentation in:
 # https://docs.scrapy.org/en/latest/topics/items.html
 
+import re
 import scrapy
 from itemloaders.processors import TakeFirst,MapCompose,Join
 from unidecode import unidecode
 
 def clean(string):
     string = string.strip()
+    string = re.sub("\s\s+" , " ", string)
     new_string = ''
     for char in string:
         if char.upper() == 'Ñ':
             new_string += char.upper()
         else:
             new_string += unidecode(char).upper()
-    return new_string.replace('"',"'")
+    return new_string.replace('"',"'").replace("\n",' ')
 
 class JudicialItem(scrapy.Item):
     # define the fields for your item here like:

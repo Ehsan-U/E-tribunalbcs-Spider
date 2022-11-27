@@ -1,5 +1,6 @@
 import datetime
 import re
+from urllib.parse import parse_qs,urlparse
 import scrapy
 from unidecode import unidecode
 from isodate import parse_datetime
@@ -34,8 +35,10 @@ class JudiSpider(scrapy.Spider):
         "loreto":"V5418",
         "mulege":"V5418"
     }
-    
+    daily = False
+
     def start_requests(self):
+        
         url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdos.aspx'
         yield scrapy.Request(url, callback=self.collect_juzgados)
 
@@ -43,7 +46,6 @@ class JudiSpider(scrapy.Spider):
     def collect_juzgados(self, response):
         sel = scrapy.Selector(text=response.text)
         for a in sel.xpath("(//a[@class='a' and contains(@href, 'LiAcuerdos')])[position() >3]"):
-            # (//a[@class='a' and contains(@href, 'LiAcuerdos')])[position() >3]
             entidad = a.xpath(".//ancestor::table/@id").get().lower().replace('tbl','')
             juzgado = a.xpath("./text()").get()
             materia = self.find_materia(juzgado)
@@ -52,29 +54,38 @@ class JudiSpider(scrapy.Spider):
 
         # juz_mat_ent is a tuple ,e.g (juzgado, materia, entidad)
         for url, juz_mat_ent in self.juzgados.items():
-            yield scrapy.Request(url, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
-            break    
+            if juz_mat_ent[-1] == 'lapaz':
+                if 'LABORAL' in juz_mat_ent[-2]:
+                    continue
+                else:
+                    yield scrapy.Request(url, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
+                    break
 
     def parse_juzgado(self, response, juz_mat_ent):
         sel = scrapy.Selector(text=response.text)
         year = sel.xpath("((//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr)[1]//tr/td)[2]/text()").get()[-4:]
         entidad = juz_mat_ent[-1]
+        juz_id = parse_qs(urlparse(response.url).query)['JuzId'][0]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr/td/a"):
             date_ = day.xpath("./@title").get().lower() +" "+ year
             # lapaz+8039, lopaz+8040 etc
-            day_id = entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
+            day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
             if not day_id in self.days_gone:
-                print(date_)
+                print(day_id)
                 self.local_db.write(f"{day_id}\n")
                 payload = self.prepare_post(sel, day=day)
                 yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent, "fecha":date_})
-        # go to previous month
-        payload = self.prepare_post(sel,entidad=entidad)
-        if payload:
-            yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
+        if bool(self.daily):
+            # print('daily mode')
+            pass
         else:
-            print(f"\n[+] Ends on {entidad}")
+            # go to previous month
+            payload = self.prepare_post(sel,entidad=entidad)
+            if payload:
+                yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
+            else:
+                print(f"\n[+] Ends on {entidad}")
 
     def parse_day(self, response, juz_mat_ent, fecha):
         fecha, fecha_insercion, fecha_tecnica = self.create_fechas(fecha)
@@ -90,7 +101,7 @@ class JudiSpider(scrapy.Spider):
                 # if both expediente,amparo in expediente field then remove amparo
                 if "EXPEDIENTE" in expediente:
                     if "AMPARO" in expediente:
-                        expediente = re.search("(?:EXPEDIENTE)(.*)(?:AMPARO.*)", expediente).group(1)
+                        expediente = re.search("(?:EXPEDIENTE)((.|\n)*)(?:AMPARO.*)", expediente).group(1)
                     else:
                         expediente = expediente.replace("EXPEDIENTE:", '')
                 else:
@@ -105,6 +116,8 @@ class JudiSpider(scrapy.Spider):
                     tipo = "EXPEDIENTILLO"
                 elif "JUICIO EJECUTIVO MERCANTIL" in partes[0].upper():
                     tipo = "JUICIO EJECUTIVO MERCANTIL"
+                elif "EJECUTIVO MERCANTIL" in partes[0].upper():
+                    tipo = "EJECUTIVO MERCANTIL"
                 elif "EXHORTO" in partes[0][:8].upper():
                     tipo = 'EXHORTO'
                 elif "-" in partes[0]:
@@ -126,12 +139,12 @@ class JudiSpider(scrapy.Spider):
                     raw_actor = actor
                     actor = actor.split(' VS')[0]
                     if "-" in actor:
-                        actor = re.search("(?:[^0-9]-[^0-9])(.*?)(?:VS)", raw_actor).group(1)
+                        actor = re.search("(?:[^0-9]-[^0-9])((.|\n)*?)(?:VS)", raw_actor).group(1)
                     else:
                         pass
                 elif "PROMOVIDO POR" in actor:
                     try:
-                        actor = re.search("(?:PROMOVIDO POR)(.*?)(?:EN CONTRA DE|,)", actor).group(1)
+                        actor = re.search("(?:PROMOVIDO POR)((.|\n)*?)(?:EN CONTRA DE|,)", actor).group(1)
                     except AttributeError:
                         actor = ''
                 else:
@@ -186,7 +199,7 @@ class JudiSpider(scrapy.Spider):
             # H = Organo_jurisdiccional_origen
             partes = row.xpath("(./td[@valign])[2]//text()").getall()
             if partes:
-                Organo_jurisdiccional_origen = re.search("(?:PROCEDENTE DEL|REMITIDO POR EL)(.*)(?:DEUCIDO DEL|DEDUCIDO DEL|DERIVADO DE)", partes[0])
+                Organo_jurisdiccional_origen = re.search("(?:PROCEDENTE DEL|REMITIDO POR EL)((.|\n)*)(?:DEUCIDO DEL|DEDUCIDO DEL|DERIVADO DE)", partes[0])
                 if Organo_jurisdiccional_origen:
                     Organo_jurisdiccional_origen = Organo_jurisdiccional_origen.group(1)
                 else:

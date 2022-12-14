@@ -9,15 +9,26 @@ from itemloaders.processors import TakeFirst,MapCompose,Join
 from unidecode import unidecode
 
 def clean(string):
-    string = string.strip()
-    string = re.sub("\s\s+" , " ", string)
-    new_string = ''
-    for char in string:
-        if char.upper() == 'Ñ':
-            new_string += char.upper()
-        else:
-            new_string += unidecode(char).upper()
-    return new_string.replace('"',"'").replace("\n",' ')
+    if string:
+        #  if first char is . remove it
+        if string.startswith('.'):
+            string = string.replace('.','', 1)
+        string = re.sub("([*]{1,5})", '', re.sub("([*]{5}\sY\s[*]{5})", '', re.sub("(\*.*@.*\.[a-zA-Z]{2,4})", "", re.sub("\s\s+" , " ", string))))
+        string = string.replace("*****,",'').replace("*****",'')
+        string = string.strip()
+        new_string = ''
+        for char in string:
+            if char.upper() == 'Ñ':
+                new_string += char.upper()
+            else:
+                new_string += unidecode(char).upper()
+        if new_string.endswith(','):
+            new_string = new_string.replace(',', '')
+        return new_string.replace('"',"'").replace("\n",' ')
+    return string
+
+def check(value):
+    print(type(value))
 
 class JudicialItem(scrapy.Item):
     # define the fields for your item here like:
@@ -106,3 +117,4 @@ class JudicialItem(scrapy.Item):
     fecha_tecnica = scrapy.Field(
         output_processor = TakeFirst()
     )
+

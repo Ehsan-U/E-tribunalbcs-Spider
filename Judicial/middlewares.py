@@ -81,6 +81,7 @@ class JudicialDownloaderMiddleware:
         return None
 
     def process_response(self, request, response, spider):
+        
         # Called with the response returned from the downloader.
 
         # Must either;

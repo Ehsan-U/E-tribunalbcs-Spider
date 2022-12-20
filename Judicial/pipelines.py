@@ -12,16 +12,18 @@ from pymongo import MongoClient
 from scrapy.exceptions import DropItem
 
 class Mongo_Pipeline(object):
-    collection = 'test'
+    collection = 'Judicial_Baja_California_Sur'
 
     def __init__(self):
         self.MONGODB_HOST = '104.225.140.236'
         self.MONGODB_PORT = '27017'
         self.MONGODB_USER = 'Pad32'
         self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
-        self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        # self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
         # self.mongo_url = 'mongodb+srv://window:VYEubgqPlDsQwwoZ@cluster1.409m5rv.mongodb.net/?retryWrites=true&w=majority'
-        # self.mongo_db = 'testdb'
+        self.mongo_url = "mongodb://localhost:27017"
+        self.mongo_db = 'testdb'
+        # self.mongo_db = 'Crudo'
 
     def open_spider(self, spider):
         self.client = MongoClient(self.mongo_url)

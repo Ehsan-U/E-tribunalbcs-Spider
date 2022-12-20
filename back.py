@@ -37,8 +37,12 @@ class JudiSpider(scrapy.Spider):
     }
     daily = False
     goto_flag = True
+    end_date = {
+        "end":"V8401"
+    }
     start_dates = {
         "lapaz":"V4839",
+        # "lapaz":"V8309",
         # "loscabos":"V5387",
         # "comondu":"V5357",
         # "loreto":"V5418",
@@ -87,16 +91,29 @@ class JudiSpider(scrapy.Spider):
         # juz_mat_ent is a tuple ,e.g (juzgado, materia, entidad)
         # send just one request to initiate
         for url in list(self.juzgados.keys())[:1]:
-            yield scrapy.Request(url, callback=self.parse_juzgado, dont_filter=True)
+            yield scrapy.Request(url, callback=self.back_to_past, dont_filter=True)
             
+    def back_to_past(self, response):
+        temp_entidad = 'lapaz'
+        sel = scrapy.Selector(text=response.text)
+        payload = self.prepare_post(sel,entidad=temp_entidad, back=True)
+        if not type(payload) == list:
+            yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.back_to_past, dont_filter=True)
+        # stop when start-date found
+        else:
+            # start-date included
+            print(f" [+] start-date found! {payload[0]['__EVENTARGUMENT']}")
+            yield scrapy.FormRequest(url=response.url, formdata=payload[0], callback=self.parse_juzgado, dont_filter=True)
 
     def parse_juzgado(self, response):
         sel = scrapy.Selector(text=response.text)
         year = sel.xpath("((//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr)[1]//tr/td)[2]/text()").get()[-4:]
+        
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr/td/a"):
             # 29 de noviembre 2022
             date_ = day.xpath("./@title").get().lower() +" "+ year
+            
             fecha = self.create_fechas(date_)
             # if fecha == '2017/12/05':
             # lapaz+8039, lopaz+8040 etc
@@ -105,6 +122,7 @@ class JudiSpider(scrapy.Spider):
                 juz_id = juz_mat_ent_juzid[-1]
                 day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
                 if not day_id in self.days_gone:
+                    
                     self.days_gone.append(day_id)
                     self.local_db.write(f"{day_id}\n")
                     payload = self.prepare_post(sel, day=day)
@@ -114,12 +132,13 @@ class JudiSpider(scrapy.Spider):
             # print('daily mode')
             pass
         else:
-            # go to previous month 
+            # end-date excluded
+            # go to next month (default)
             payload = self.prepare_post(sel,entidad=entidad)
             if payload:
                 yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True)
             else:
-                pass
+                print(f" [+] end-date found")
 
     def parse_day(self, response, juz_mat_ent_juzid, fecha):
         # count = 0
@@ -296,16 +315,28 @@ class JudiSpider(scrapy.Spider):
             #     # only one item
             #     break
 
-    def prepare_post(self, sel, entidad=None, day=None):
+    def prepare_post(self, sel, entidad=None, back=None, day=None):
+        viewstate = sel.xpath("//input[@id='__VIEWSTATE']/@value").get()
+        validation = sel.xpath("//input[@id='__EVENTVALIDATION']/@value").get()
         if day:
             day_id = re.search(r"(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
         elif entidad:
-            previous_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
-            day_id = re.search(r"(?:')(V[0-9].*)(?:')", previous_month_id).group(1)
-            if self.start_dates[entidad.lower()] == day_id:
-                return None
-        viewstate = sel.xpath("//input[@id='__VIEWSTATE']/@value").get()
-        validation = sel.xpath("//input[@id='__EVENTVALIDATION']/@value").get()
+            if back:
+                previous_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
+                day_id = re.search(r"(?:')(V[0-9].*)(?:')", previous_month_id).group(1)
+                if self.start_dates[entidad.lower()] == day_id:
+                    start_payload = {
+                        "__EVENTTARGET":"ctl00$ContentPlaceHolder1$Calendar1",
+                        "__EVENTARGUMENT":day_id,
+                        "__VIEWSTATE":viewstate,
+                        "__EVENTVALIDATION":validation,
+                    }
+                    return [start_payload]
+            else:
+                next_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[2]/@href").get()
+                day_id = re.search(r"(?:')(V[0-9].*)(?:')", next_month_id).group(1)
+                if self.end_date['end'] == day_id:
+                    return None
         payload = {
             "__EVENTTARGET":"ctl00$ContentPlaceHolder1$Calendar1",
             "__EVENTARGUMENT":day_id,

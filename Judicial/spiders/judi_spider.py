@@ -37,21 +37,21 @@ class JudiSpider(scrapy.Spider):
     }
     daily = False
     goto_flag = True
-    # start_dates = {
-    #     "lapaz":"V4839",
-    #     "loscabos":"V5387",
-    #     "comondu":"V5357",
-    #     "loreto":"V5418",
-    #     "mulege":"V5418"
-    # }
-    # 2022/12
     start_dates = {
-        "lapaz":"V8279",
-        "loscabos":"V8279",
-        "comondu":"V8279",
-        "loreto":"V8279",
-        "mulege":"V8279"
+        "lapaz":"V4839",
+        "loscabos":"V5387",
+        "comondu":"V5357",
+        "loreto":"V5418",
+        "mulege":"V5418"
     }
+    # 2022/12
+    # start_dates = {
+    #     "lapaz":"V8279",
+    #     "loscabos":"V8279",
+    #     "comondu":"V8279",
+    #     "loreto":"V8279",
+    #     "mulege":"V8279"
+    # }
     # 2019/12
     # start_dates = {
     #     "lapaz":"V7244",

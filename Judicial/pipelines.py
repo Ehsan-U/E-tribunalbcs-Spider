@@ -19,11 +19,11 @@ class Mongo_Pipeline(object):
         self.MONGODB_PORT = '27017'
         self.MONGODB_USER = 'Pad32'
         self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
-        # self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
         # self.mongo_url = 'mongodb+srv://window:VYEubgqPlDsQwwoZ@cluster1.409m5rv.mongodb.net/?retryWrites=true&w=majority'
-        self.mongo_url = "mongodb://localhost:27017"
-        self.mongo_db = 'testdb'
-        # self.mongo_db = 'Crudo'
+        # self.mongo_url = "mongodb://localhost:27017"
+        # self.mongo_db = 'testdb'
+        self.mongo_db = 'Crudo'
 
     def open_spider(self, spider):
         self.client = MongoClient(self.mongo_url)

@@ -33,8 +33,6 @@ class JudiSpider():
         "loreto":"LORETO",
         "mulege":"MULEGE",
     }
-    daily = False
-    goto_flag = True
     end_date = "V8401"
     # start_date = "V4839"
     start_date = "V8340"
@@ -112,7 +110,6 @@ class JudiSpider():
 
     def parse_juzgado(self, response):
         sel = scrapy.Selector(text=response.text)
-        self.global_sel = sel
         year = sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
@@ -127,7 +124,6 @@ class JudiSpider():
                 juz_id = juz_mat_ent_juzid[-1]
                 day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
                 if not day_id in self.days_gone:
-                    self.con.print(fecha)
                     self.days_gone.append(day_id)
                     self.local_db.write(f"{day_id}\n")
                     payload = self.prepare_post(sel, day=day)
@@ -135,20 +131,18 @@ class JudiSpider():
                     # self.juz_mat_ent_juzid = juz_mat_ent_juzid
                     resp = self.send_request(url, post={"data":payload})
                     self.parse_day(resp, juz_mat_ent_juzid, fecha)
+            print(f" [+] Fecha: {fecha}")
                     # responses.append({"response":[resp, juz_mat_ent_juzid, fecha]})
             # yield responses
-        if bool(self.daily):
-            pass
+        # end-date excluded
+        # go to next month (default)
+        payload = self.prepare_post(sel,entidad=self.temp_entidad)
+        if payload:
+            # yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True)
+            resp = self.send_request(url=response.url, post={"data":payload})
+            self.parse_day(resp)
         else:
-            # end-date excluded
-            # go to next month (default)
-            payload = self.prepare_post(sel,entidad=self.temp_entidad)
-            if payload:
-                # yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True)
-                resp = self.send_request(url=response.url, post={"data":payload})
-                self.parse_day(resp)
-            else:
-                print(f" [+] end-date found")
+            print(f" [+] end-date found")
         
 
     def parse_day(self, response, juz_mat_ent_juzid, fecha):

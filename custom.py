@@ -1,6 +1,7 @@
 import datetime
 import logging
 import re
+import threading
 from urllib.parse import parse_qs,urlparse,urljoin
 from pymongo import MongoClient
 import scrapy
@@ -8,6 +9,7 @@ from unidecode import unidecode
 from isodate import parse_datetime
 from rich.console import Console
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 class JudiSpider():
     con = Console()
@@ -38,9 +40,6 @@ class JudiSpider():
     start_date = "V8340"
 
     def __init__(self):
-        self.headers = {
-            'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36'
-        }
         self.local_db = open("localdb.txt",'a+')
         self.local_db.seek(0)
         self.days_gone = self.local_db.read().split('\n')
@@ -49,21 +48,25 @@ class JudiSpider():
         self.mongo_db = 'testdb'
         self.client = MongoClient(self.mongo_url)
         self.db = self.client[self.mongo_db]
+        self.lock = threading.Lock()
 
     def send_request(self, url, get=None, post=None):
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36'
+        }
         if get:
             try:
-                resp = requests.get(url, headers=self.headers)
+                resp = requests.get(url, headers=headers)
             except:
-                self.con.print_exception()
+                print('error in send_request get')
             else:
                 return resp
         elif post:
             payload = post['data']
             try:
-                resp = requests.post(url, data=payload, headers=self.headers)
+                resp = requests.post(url, data=payload, headers=headers)
             except:
-                self.con.print_exception()
+                print('error in send_request post')
             else:
                 return resp
 
@@ -98,15 +101,6 @@ class JudiSpider():
             # yield scrapy.FormRequest(url=response.url, formdata=payload[0], callback=self.parse_juzgado, dont_filter=True)
             resp = self.send_request(url=response.url, post={"data":payload[0]})
             return resp
-    
-    # def go_to_future(self):
-    #     url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
-    #     payload = self.prepare_post(self.global_sel, entidad=self.temp_entidad)
-    #     if payload:
-    #         resp = self.send_request(url, post={"data":payload})
-    #         return resp
-    #     else:
-    #         return None
 
     def parse_juzgado(self, response):
         sel = scrapy.Selector(text=response.text)
@@ -118,7 +112,7 @@ class JudiSpider():
             fecha = self.create_fechas(date_)
             # if fecha == '2017/12/05':
             # lapaz+8039, lopaz+8040 etc
-            responses = []
+            day_args = []
             for url, juz_mat_ent_juzid in self.juzgados.items():
                 entidad = juz_mat_ent_juzid[-2]
                 juz_id = juz_mat_ent_juzid[-1]
@@ -127,25 +121,23 @@ class JudiSpider():
                     self.days_gone.append(day_id)
                     self.local_db.write(f"{day_id}\n")
                     payload = self.prepare_post(sel, day=day)
-                    # yield scrapy.FormRequest(url, formdata=payload, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent_juzid":juz_mat_ent_juzid, "fecha":fecha})
-                    # self.juz_mat_ent_juzid = juz_mat_ent_juzid
-                    resp = self.send_request(url, post={"data":payload})
-                    self.parse_day(resp, juz_mat_ent_juzid, fecha)
+                    day_args.append((url, payload, juz_mat_ent_juzid, fecha, self.lock))
+            with ThreadPoolExecutor(max_workers=30) as exec:
+                exec.map(self.parse_day, day_args)
             print(f" [+] Fecha: {fecha}")
-                    # responses.append({"response":[resp, juz_mat_ent_juzid, fecha]})
             # yield responses
         # end-date excluded
         # go to next month (default)
         payload = self.prepare_post(sel,entidad=self.temp_entidad)
         if payload:
-            # yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True)
             resp = self.send_request(url=response.url, post={"data":payload})
-            self.parse_day(resp)
+            self.parse_juzgado(resp)
         else:
             print(f" [+] end-date found")
-        
 
-    def parse_day(self, response, juz_mat_ent_juzid, fecha):
+    def parse_day(self, day_args):
+        url, payload, juz_mat_ent_juzid, fecha, lock = day_args
+        response = self.send_request(url, post={'data':payload})
         # count = 0
         # entidad
         entidad = juz_mat_ent_juzid[-2]
@@ -314,7 +306,7 @@ class JudiSpider():
                 "fecha_insercion":'',
                 "fecha_tecnica":'',
             }
-            self.insert_db(item)
+            self.insert_db(item, lock)
     
     def clean(self, string):
         if string:
@@ -396,17 +388,18 @@ class JudiSpider():
             materia = 'administrativa'
         return materia.upper()
 
-    def insert_db(self, item):
+    def insert_db(self, item, lock):
         fecha = item.get("fecha")
         expediente = item.get("expediente")
         entidad = item.get("entidad")
         actor = item.get("actor")
         tipo = item.get("tipo")
         try:
-            result = self.db[self.collection].count_documents({"fecha":fecha, "expediente":expediente, "entidad":entidad,'actor':actor,'tipo':tipo})
+            with lock:
+                result = self.db[self.collection].count_documents({"fecha":fecha, "expediente":expediente, "entidad":entidad,'actor':actor,'tipo':tipo})
         # in case of issue, just pass
         except:
-            self.con.print_exception()
+            print("error in db query")
             return None
         if result:
             # print(" [+] Duplicate item ")
@@ -419,9 +412,10 @@ class JudiSpider():
             item['fecha_insercion'] = fecha_insercion
             item['fecha_tecnica'] = fecha_tecnica
             try:
-                self.db[self.collection].insert_one(dict(item))
+                with lock:
+                    self.db[self.collection].insert_one(dict(item))
             except:
-                self.con.print_exception()
+                print("error in db query")
                 return None
 
     def main(self):

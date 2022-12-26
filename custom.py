@@ -35,17 +35,23 @@ class JudiSpider():
         "loreto":"LORETO",
         "mulege":"MULEGE",
     }
-    end_date = "V8401"
-    # start_date = "V4839"
-    start_date = "V8340"
+    end_date = "V8432"
+    start_date = "V4900"
+    #start_date = "V8340"
 
     def __init__(self):
         self.local_db = open("localdb.txt",'a+')
         self.local_db.seek(0)
         self.days_gone = self.local_db.read().split('\n')
         self.collection = 'Judicial_Baja_California_Sur'
-        self.mongo_url = "mongodb://localhost:27017"
-        self.mongo_db = 'testdb'
+        self.MONGODB_HOST = '104.225.140.236'
+        self.MONGODB_PORT = '27017'
+        self.MONGODB_USER = 'Pad32'
+        self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
+        self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        #self.mongo_url = "mongodb://localhost:27017"
+        #self.mongo_db = 'testdb'
+        self.mongo_db = 'Crudo'
         self.client = MongoClient(self.mongo_url)
         self.db = self.client[self.mongo_db]
         self.lock = threading.Lock()

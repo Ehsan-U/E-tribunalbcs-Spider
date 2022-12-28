@@ -37,7 +37,8 @@ class JudiSpider():
     }
     end_date = "V8432"
     start_date = "V4900"
-    #start_date = "V8340"
+    # start_date = "V8340"
+    # start_date = "V6879"
 
     def __init__(self):
         self.local_db = open("localdb.txt",'a+')
@@ -49,8 +50,8 @@ class JudiSpider():
         self.MONGODB_USER = 'Pad32'
         self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
         self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
-        #self.mongo_url = "mongodb://localhost:27017"
-        #self.mongo_db = 'testdb'
+        # self.mongo_url = "mongodb://localhost:27017"
+        # self.mongo_db = 'testdb'
         self.mongo_db = 'Crudo'
         self.client = MongoClient(self.mongo_url)
         self.db = self.client[self.mongo_db]
@@ -62,7 +63,7 @@ class JudiSpider():
         }
         if get:
             try:
-                resp = requests.get(url, headers=headers)
+                resp = requests.get(url, headers=headers, timeout=10)
             except:
                 print('error in send_request get')
             else:
@@ -70,7 +71,7 @@ class JudiSpider():
         elif post:
             payload = post['data']
             try:
-                resp = requests.post(url, data=payload, headers=headers)
+                resp = requests.post(url, data=payload, headers=headers, timeout=10)
             except:
                 print('error in send_request post')
             else:
@@ -113,6 +114,7 @@ class JudiSpider():
         year = sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
+            # if "27" in day.xpath("./@title").get():
             # 29 de noviembre 2022
             date_ = day.xpath("./@title").get().lower() +" "+ year
             fecha = self.create_fechas(date_)
@@ -120,9 +122,10 @@ class JudiSpider():
             # lapaz+8039, lopaz+8040 etc
             day_args = []
             for url, juz_mat_ent_juzid in self.juzgados.items():
+                # if "Tercera Sala Unitaria Civil y de Justicia Administrativa (Materia Administrativa)" in juz_mat_ent_juzid[0]:
                 entidad = juz_mat_ent_juzid[-2]
                 juz_id = juz_mat_ent_juzid[-1]
-                day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
+                day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)+juz_mat_ent_juzid[0][-10:]
                 if not day_id in self.days_gone:
                     self.days_gone.append(day_id)
                     self.local_db.write(f"{day_id}\n")
@@ -148,6 +151,7 @@ class JudiSpider():
         # entidad
         entidad = juz_mat_ent_juzid[-2]
         sel = scrapy.Selector(text=response.text)
+        # print(f'''{juz_mat_ent_juzid[0]}, {len(sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_tblResultados']/tbody/tr/td[@valign][1]//text()").getall())}''')
         for row in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_tblResultados']/tbody/tr"):
             # C = expediente
             expediente = ''
@@ -331,6 +335,8 @@ class JudiSpider():
             if new_string.endswith(','):
                 new_string = new_string.replace(',', '')
             return new_string.replace('"',"'").replace("\n",' ')
+        elif string == None:
+            string = ''
         return string
 
     def prepare_post(self, sel, entidad=None, back=None, day=None):

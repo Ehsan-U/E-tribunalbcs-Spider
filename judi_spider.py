@@ -49,10 +49,10 @@ class JudiSpider():
         self.MONGODB_PORT = '27017'
         self.MONGODB_USER = 'Pad32'
         self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
-        self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
-        # self.mongo_url = "mongodb://localhost:27017"
-        # self.mongo_db = 'testdb'
-        self.mongo_db = 'Crudo'
+        # self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        self.mongo_url = "mongodb://localhost:27017"
+        self.mongo_db = 'testdb'
+        # self.mongo_db = 'Crudo'
         self.client = MongoClient(self.mongo_url)
         self.db = self.client[self.mongo_db]
         self.lock = threading.Lock()
@@ -114,26 +114,26 @@ class JudiSpider():
         year = sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
-            # if "31" in day.xpath("./@title").get():
+            if "26" in day.xpath("./@title").get():
             # 29 de noviembre 2022
-            date_ = day.xpath("./@title").get().lower() +" "+ year
-            fecha = self.create_fechas(date_)
-            # if fecha == '2017/12/05':
-            # lapaz+8039, lopaz+8040 etc
-            day_args = []
-            for url, juz_mat_ent_juzid in self.juzgados.items():
-                # if "Primera Sala Unitaria en Materia Civil".lower() in juz_mat_ent_juzid[0].lower():
-                entidad = juz_mat_ent_juzid[-2]
-                juz_id = juz_mat_ent_juzid[-1]
-                day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)+juz_mat_ent_juzid[0][-10:]
-                if not day_id in self.days_gone:
-                    self.days_gone.append(day_id)
-                    self.local_db.write(f"{day_id}\n")
-                    payload = self.prepare_post(sel, day=day)
-                    day_args.append((url, payload, juz_mat_ent_juzid, fecha, self.lock))
-            with ThreadPoolExecutor(max_workers=30) as exec:
-                exec.map(self.parse_day, day_args)
-            print(f"\r [+] Fecha: {fecha}",end='')
+                date_ = day.xpath("./@title").get().lower() +" "+ year
+                fecha = self.create_fechas(date_)
+                if fecha == '2022/09/26':
+                # lapaz+8039, lopaz+8040 etc
+                    day_args = []
+                    for url, juz_mat_ent_juzid in self.juzgados.items():
+                        # if "Primera Sala Unitaria en Materia Civil".lower() in juz_mat_ent_juzid[0].lower():
+                        entidad = juz_mat_ent_juzid[-2]
+                        juz_id = juz_mat_ent_juzid[-1]
+                        day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)+juz_mat_ent_juzid[0][-10:]
+                        if not day_id in self.days_gone:
+                            self.days_gone.append(day_id)
+                            self.local_db.write(f"{day_id}\n")
+                            payload = self.prepare_post(sel, day=day)
+                            day_args.append((url, payload, juz_mat_ent_juzid, fecha, self.lock))
+                    with ThreadPoolExecutor(max_workers=30) as exec:
+                        exec.map(self.parse_day, day_args)
+                    print(f"\r [+] Fecha: {fecha}",end='')
             # yield responses
         # return None
         # end-date excluded
@@ -201,6 +201,9 @@ class JudiSpider():
                         # startwith B.C.S. , BAJA CALIFORNIA SUR , - till VS
                         if re.search("(?:B.C.S.\s|BAJA\sCALIFORNIA\sSUR\s|-)(.*?)(?:VS)", orig_partes):
                             actor = re.search("(?:B.C.S.\s|BAJA\sCALIFORNIA\sSUR\s|-)(.*?)(?:VS)", orig_partes).group(1)
+                        if not actor:
+                            if re.search("(.*?)(?:VS)", orig_partes):
+                                actor = re.search("(.*?)(?:VS)", orig_partes).group(1)
                     # startswith - till VS
                     elif "-" in partes:
                         if re.search("(?:[^0-9]-[^0-9])((.|\n)*?)(?:VS)", orig_partes):

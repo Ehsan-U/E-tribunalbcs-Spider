@@ -36,8 +36,8 @@ class JudiSpider():
         "mulege":"MULEGE",
     }
     end_date = "V8432"
-    # start_date = "V4900"
-    start_date = "V8309"
+    start_date = "V4900"
+    # start_date = "V8309"
     # start_date = "V6879"
 
     def __init__(self):

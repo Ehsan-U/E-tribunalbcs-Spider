@@ -3,13 +3,66 @@ from urllib.parse import parse_qs, urlparse, urljoin
 import scrapy
 from scrapy import signals
 from unidecode import unidecode
+import datetime
+from isodate import parse_datetime
+from pymongo import MongoClient
+from scrapy.exceptions import DropItem
+from scrapy.crawler import CrawlerProcess
+
+
+
+##########################  DB PIPELINE  ##########################
+
+class Mongo_Pipeline(object):
+    collection = 'Judicial_Baja_California_Sur'
+
+    def __init__(self):
+        self.collection = 'Judicial_Baja_California_Sur'
+        self.MONGODB_HOST = '104.225.140.236'
+        self.MONGODB_PORT = '27017'
+        self.MONGODB_USER = 'Pad32'
+        self.MONGODB_PASS = 'lGhg4S8AYZ85o7qe'
+        # self.mongo_url = 'mongodb://' + self.MONGODB_USER + ':' + self.MONGODB_PASS + '@' + self.MONGODB_HOST + ':' + self.MONGODB_PORT + '/Crudo'
+        self.mongo_url = "mongodb://localhost:27017"
+        self.mongo_db = 'testdb'
+        # self.mongo_db = 'Crudo'
+
+    def open_spider(self, spider):
+        self.client = MongoClient(self.mongo_url)
+        self.db = self.client[self.mongo_db]
+
+    def close_spider(self, spider):
+        self.client.close()
+
+    def process_item(self, item, spider):
+        fecha = item.get("fecha")
+        expediente = item.get("expediente")
+        entidad = item.get("entidad")
+        actor = item.get("actor")
+        tipo = item.get("tipo")
+        if self.db[self.collection].count_documents({"fecha":fecha, "expediente":expediente, "entidad":entidad,'actor':actor,'tipo':tipo}):
+            raise DropItem(" [+] Duplicate item ")
+        else:
+            fecha = item.get('fecha')
+            today = datetime.datetime.now()
+            fecha_insercion = parse_datetime(today.isoformat())
+            fecha_tecnica = parse_datetime(datetime.datetime.strptime(fecha, "%Y/%m/%d").isoformat())
+            item['fecha_insercion'] = fecha_insercion
+            item['fecha_tecnica'] = fecha_tecnica
+            self.db[self.collection].insert_one(dict(item))
+            return item
+
+
+
+##########################  SPIDER  ##########################
+
 
 class JudiScraper(scrapy.Spider):
     name = 'judi_spider'
     allowed_domains = ['e-tribunalbcs.mx']
-    # start_date = "V4900"
-    start_date = "V8370" # included
-    end_date = "V84333" # excluded
+    start_date = "V4900"
+    # start_date = "V8370" # included
+    end_date = "V8432" # excluded
     months = {
         "de enero": "01",
         "de febrero": "02",
@@ -32,7 +85,7 @@ class JudiScraper(scrapy.Spider):
         "mulege": "MULEGE",
     }
     juzgados = {}
-    daily = {'status':True, 'run_once':True}
+    daily = {'status':False, 'run_once':True}
 
     def start_requests(self):
         url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
@@ -43,7 +96,6 @@ class JudiScraper(scrapy.Spider):
         if self.daily['status'] and self.daily['run_once']:
             self.daily['run_once'] = False
             self.cal_start_end(response)
-        print(response.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get())
         month_id = self.calender_id(response, backward=True)
         if month_id != self.start_date:
             formdata = self.extract_form(response, month_id)
@@ -269,7 +321,6 @@ class JudiScraper(scrapy.Spider):
                 "fecha_insercion": '',
                 "fecha_tecnica": '',
             }
-            print(item['fecha'])
             yield item
 
     def extract_form(self, response, id):
@@ -359,8 +410,6 @@ class JudiScraper(scrapy.Spider):
         self.start_date = self.calender_id(response, backward=True)
         self.end_date = self.calender_id(response)
 
-##################################################################
-
     def closed(self, reason):
         self.local_db.close()
 
@@ -376,5 +425,32 @@ class JudiScraper(scrapy.Spider):
         self.days_gone = self.local_db.read().split('\n')
 
 
+
 ##################################################################
+
+crawler = CrawlerProcess(settings={
+    "REQUEST_FINGERPRINTER_IMPLEMENTATION": '2.7',
+    "TWISTED_REACTOR": 'twisted.internet.asyncioreactor.AsyncioSelectorReactor',
+    "ITEM_PIPELINES": {
+       Mongo_Pipeline: 300,
+    },
+    "DEPTH_PRIORITY": 1,
+    "SCHEDULER_DISK_QUEUE": 'scrapy.squeues.PickleFifoDiskQueue',
+    "SCHEDULER_MEMORY_QUEUE": 'scrapy.squeues.FifoMemoryQueue',
+    "DEFAULT_REQUEST_HEADERS": {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+      'host': 'e-tribunalbcs.mx',
+    },
+    "COOKIES_ENABLED": False,
+    "DOWNLOAD_DELAY": 1,
+    "ROBOTSTXT_OBEY": False,
+    "USER_AGENT": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+})
+
+crawler.crawl(JudiScraper)
+crawler.start()
+
+##################################################################
+
 

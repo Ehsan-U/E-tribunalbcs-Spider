@@ -6,10 +6,10 @@ from unidecode import unidecode
 
 class JudiScraper(scrapy.Spider):
     name = 'judi_spider'
-    flag = True
     allowed_domains = ['e-tribunalbcs.mx']
     # start_date = "V4900"
-    start_date = "V8370"
+    start_date = "V8370" # included
+    end_date = "V84333" # excluded
     months = {
         "de enero": "01",
         "de febrero": "02",
@@ -32,8 +32,7 @@ class JudiScraper(scrapy.Spider):
         "mulege": "MULEGE",
     }
     juzgados = {}
-    test_Day = 0
-
+    daily = {'status':True, 'run_once':True}
 
     def start_requests(self):
         url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
@@ -41,6 +40,9 @@ class JudiScraper(scrapy.Spider):
 
 
     def time_machine(self, response):
+        if self.daily['status'] and self.daily['run_once']:
+            self.daily['run_once'] = False
+            self.cal_start_end(response)
         print(response.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get())
         month_id = self.calender_id(response, backward=True)
         if month_id != self.start_date:
@@ -69,7 +71,6 @@ class JudiScraper(scrapy.Spider):
 
     def parse(self, response):
         year = response.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
-        # self.priority = 100
         for day in response.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
             date_ = day.xpath("./@title").get().lower() + " " + year
             fecha = self.create_fechas(date_)
@@ -83,10 +84,12 @@ class JudiScraper(scrapy.Spider):
                     day_id = self.calender_id(None, day=day)
                     formdata = self.extract_form(response, day_id)
                     yield scrapy.FormRequest(url, formdata=formdata, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent_juzid":juz_mat_ent_juzid, "fecha":fecha})
-            # self.logger.info(f" [+] Fecha: {fecha}")
-            # print(f" [+] Fecha: {fecha}")
-            # self.priority -= 1
-
+            self.logger.info(f" [+] Fecha: {fecha}")
+        # next calender
+        month_id = self.calender_id(response, backward=False)
+        if month_id != self.end_date:
+            formdata = self.extract_form(response, month_id)
+            yield scrapy.FormRequest(url=response.url, callback=self.parse, dont_filter=True, formdata=formdata)
 
 
     def parse_day(self, response, juz_mat_ent_juzid, fecha):
@@ -266,7 +269,7 @@ class JudiScraper(scrapy.Spider):
                 "fecha_insercion": '',
                 "fecha_tecnica": '',
             }
-            print(f" [+] {fecha}")
+            print(item['fecha'])
             yield item
 
     def extract_form(self, response, id):
@@ -274,7 +277,6 @@ class JudiScraper(scrapy.Spider):
         validation = response.xpath("//input[@id='__EVENTVALIDATION']/@value").get()
         formdata = {
             "__EVENTTARGET": "ctl00$ContentPlaceHolder1$Calendar1",
-            # "__EVENTARGUMENT": ,
             "__EVENTARGUMENT": id,
             "__VIEWSTATE": viewstate,
             "__EVENTVALIDATION": validation,
@@ -353,6 +355,10 @@ class JudiScraper(scrapy.Spider):
             string = ''
         return string
 
+    def cal_start_end(self, response):
+        self.start_date = self.calender_id(response, backward=True)
+        self.end_date = self.calender_id(response)
+
 ##################################################################
 
     def closed(self, reason):
@@ -368,3 +374,7 @@ class JudiScraper(scrapy.Spider):
         self.local_db = open("localdb.txt", 'a+')
         self.local_db.seek(0)
         self.days_gone = self.local_db.read().split('\n')
+
+
+##################################################################
+

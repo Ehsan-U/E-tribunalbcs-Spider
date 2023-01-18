@@ -37,37 +37,10 @@ class JudiSpider(scrapy.Spider):
     }
     daily = False
     goto_flag = True
-    start_dates = {
-        "lapaz":"V4839",
-        "loscabos":"V5387",
-        "comondu":"V5357",
-        "loreto":"V5418",
-        "mulege":"V5418"
-    }
-    # 2022/12
-    # start_dates = {
-    #     "lapaz":"V8279",
-    #     "loscabos":"V8279",
-    #     "comondu":"V8279",
-    #     "loreto":"V8279",
-    #     "mulege":"V8279"
-    # }
-    # 2019/12
-    # start_dates = {
-    #     "lapaz":"V7244",
-    #     "loscabos":"V7244",
-    #     "comondu":"V7244",
-    #     "loreto":"V7244",
-    #     "mulege":"V7244"
-    # }
-    # 2017/12
-    # start_dates = {
-    #     "lapaz":"V6514",
-    #     "loscabos":"V6514",
-    #     "comondu":"V6514",
-    #     "loreto":"V6514",
-    #     "mulege":"V6514"
-    # }
+    end_date = "V8401"
+    # start_date = "V4839"
+    start_date = "V8309"
+    
 
     def start_requests(self):
         url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdos.aspx'
@@ -81,43 +54,63 @@ class JudiSpider(scrapy.Spider):
             juzgado = a.xpath("./text()").get()
             materia = self.find_materia(juzgado)
             url = response.urljoin(a.xpath("./@href").get())
-            self.juzgados[url] = [juzgado, materia, entidad]
+            juz_id = parse_qs(urlparse(url).query)['JuzId'][0]
+            self.juzgados[url] = [juzgado, materia, entidad, juz_id]
         # juz_mat_ent is a tuple ,e.g (juzgado, materia, entidad)
-        for url, juz_mat_ent in self.juzgados.items():
-            yield scrapy.Request(url, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
+        # send just one request to initiate
+        url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
+        yield scrapy.Request(url, callback=self.back_to_past, dont_filter=True)
             
+    def back_to_past(self, response):
+        self.temp_entidad = 'lapaz'
+        sel = scrapy.Selector(text=response.text)
+        payload = self.prepare_post(sel,entidad=self.temp_entidad, back=True)
+        if not type(payload) == list:
+            yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.back_to_past, dont_filter=True)
+        # stop when start-date found
+        else:
+            # start-date included
+            print(f" [+] start-date found! {payload[0]['__EVENTARGUMENT']}")
+            yield scrapy.FormRequest(url=response.url, formdata=payload[0], callback=self.parse_juzgado, dont_filter=True)
 
-    def parse_juzgado(self, response, juz_mat_ent):
+    def parse_juzgado(self, response):
         sel = scrapy.Selector(text=response.text)
         year = sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
-        entidad = juz_mat_ent[-1]
-        juz_id = parse_qs(urlparse(response.url).query)['JuzId'][0]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
+            # 29 de noviembre 2022
             date_ = day.xpath("./@title").get().lower() +" "+ year
+            print(date_)
             fecha = self.create_fechas(date_)
+            # if fecha == '2017/12/05':
             # lapaz+8039, lopaz+8040 etc
-            day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
-            if not day_id in self.days_gone:
-                self.days_gone.append(day_id)
-                self.local_db.write(f"{day_id}\n")
-                payload = self.prepare_post(sel, day=day)
-                yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent, "fecha":fecha})
+            for url, juz_mat_ent_juzid in self.juzgados.items():
+                entidad = juz_mat_ent_juzid[-2]
+                juz_id = juz_mat_ent_juzid[-1]
+                day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
+                if not day_id in self.days_gone:
+                    self.days_gone.append(day_id)
+                    self.local_db.write(f"{day_id}\n")
+                    payload = self.prepare_post(sel, day=day)
+                    yield scrapy.FormRequest(url, formdata=payload, callback=self.parse_day, dont_filter=True, cb_kwargs={"juz_mat_ent_juzid":juz_mat_ent_juzid, "fecha":fecha})
+                    # break
         if bool(self.daily):
             # print('daily mode')
             pass
         else:
-            # go to previous month
-            payload = self.prepare_post(sel,entidad=entidad)
+            # end-date excluded
+            # go to next month (default)
+            payload = self.prepare_post(sel,entidad=self.temp_entidad)
             if payload:
-                yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True, cb_kwargs={"juz_mat_ent":juz_mat_ent})
+                yield scrapy.FormRequest(url=response.url, formdata=payload, callback=self.parse_juzgado, dont_filter=True)
             else:
-                pass
+                print(f" [+] end-date found")
 
-    def parse_day(self, response, juz_mat_ent, fecha):
+    def parse_day(self, response, juz_mat_ent_juzid, fecha):
         # count = 0
         # entidad
-        entidad = juz_mat_ent[-1]
+        entidad = juz_mat_ent_juzid[-2]
+        print(fecha)
         sel = scrapy.Selector(text=response.text)
         for row in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_tblResultados']/tbody/tr"):
             # C = expediente
@@ -176,7 +169,7 @@ class JudiSpider(scrapy.Spider):
                         actor = partes
                 elif "PROMOVIDO POR" in partes:
                     if re.search("(?:PROMOVIDO POR:|PROMOVIDO POR)((.|\n)*?)(?:ANTE\sEL|\()", partes):
-                        if juz_mat_ent[1].upper() == 'PENAL':
+                        if juz_mat_ent_juzid[1].upper() == 'PENAL':
                             demando_part = re.search("(?:PROMOVIDO POR:|PROMOVIDO POR)((.|\n)*?)(?:ANTE\sEL|\()", partes).group(1)
                         else:
                             actor = re.search("(?:PROMOVIDO POR:|PROMOVIDO POR)((.|\n)*?)(?:ANTE\sEL|\()", partes).group(1)
@@ -263,7 +256,7 @@ class JudiSpider(scrapy.Spider):
             loader.add_value('expediente',value=expediente)
             loader.add_value('fecha',value=fecha)
             loader.add_value('fuero',value='COMUN')
-            loader.add_value('juzgado',value=juz_mat_ent[0])
+            loader.add_value('juzgado',value=juz_mat_ent_juzid[0])
             loader.add_value('tipo',value=tipo)
             loader.add_value('acuerdos',value=acuerdos)
             loader.add_value('monto',value='')
@@ -274,7 +267,7 @@ class JudiSpider(scrapy.Spider):
             loader.add_value('Prestación_demandada',value='')
             loader.add_value('Organo_jurisdiccional_origen',value=Organo_jurisdiccional_origen)
             loader.add_value('expediente_origen',value=expediente_origen)
-            loader.add_value('materia',value=juz_mat_ent[1])
+            loader.add_value('materia',value=juz_mat_ent_juzid[1])
             loader.add_value('submateria',value='')
             loader.add_value('fecha_sentencia',value='')
             loader.add_value('sentido_sentencia',value='')
@@ -285,19 +278,29 @@ class JudiSpider(scrapy.Spider):
             # if count < 3:
             #     count+=1
             yield loader.load_item()
-            # else:
-            #     # only one item
-            #     break
-    def prepare_post(self, sel, entidad=None, day=None):
+
+    def prepare_post(self, sel, entidad=None, back=None, day=None):
+        viewstate = sel.xpath("//input[@id='__VIEWSTATE']/@value").get()
+        validation = sel.xpath("//input[@id='__EVENTVALIDATION']/@value").get()
         if day:
             day_id = re.search(r"(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)
         elif entidad:
-            previous_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
-            day_id = re.search(r"(?:')(V[0-9].*)(?:')", previous_month_id).group(1)
-            if self.start_dates[entidad.lower()] == day_id:
-                return None
-        viewstate = sel.xpath("//input[@id='__VIEWSTATE']/@value").get()
-        validation = sel.xpath("//input[@id='__EVENTVALIDATION']/@value").get()
+            if back:
+                previous_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
+                day_id = re.search(r"(?:')(V[0-9].*)(?:')", previous_month_id).group(1)
+                if self.start_date == day_id:
+                    start_payload = {
+                        "__EVENTTARGET":"ctl00$ContentPlaceHolder1$Calendar1",
+                        "__EVENTARGUMENT":day_id,
+                        "__VIEWSTATE":viewstate,
+                        "__EVENTVALIDATION":validation,
+                    }
+                    return [start_payload]
+            else:
+                next_month_id = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[2]/@href").get()
+                day_id = re.search(r"(?:')(V[0-9].*)(?:')", next_month_id).group(1)
+                if self.end_date == day_id:
+                    return None
         payload = {
             "__EVENTTARGET":"ctl00$ContentPlaceHolder1$Calendar1",
             "__EVENTARGUMENT":day_id,

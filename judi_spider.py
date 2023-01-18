@@ -10,12 +10,9 @@ from isodate import parse_datetime
 from rich.console import Console
 import requests
 from concurrent.futures import ThreadPoolExecutor
-<<<<<<< HEAD
 import schedule
 import time
 
-=======
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
 
 class JudiSpider():
     con = Console()
@@ -42,13 +39,8 @@ class JudiSpider():
         "mulege":"MULEGE",
     }
     end_date = "V8432"
-<<<<<<< HEAD
     # start_date = "V4900"
     start_date = "V8370"
-=======
-    start_date = "V4900"
-    # start_date = "V8309"
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
     # start_date = "V6879"
 
     def __init__(self):
@@ -159,11 +151,8 @@ class JudiSpider():
     def parse_day(self, day_args):
         url, payload, juz_mat_ent_juzid, fecha, lock = day_args
         response = self.send_request(url, post={'data':payload})
-<<<<<<< HEAD
         if not response:
             response = self.send_request(url, post={'data': payload})
-=======
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
         # count = 0
         # entidad
         entidad = juz_mat_ent_juzid[-2]
@@ -453,7 +442,6 @@ class JudiSpider():
                 print("error in db query")
                 return None
 
-<<<<<<< HEAD
 
     def cal_start_end(self):
         url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
@@ -470,10 +458,6 @@ class JudiSpider():
             self.cal_start_end()
             print(self.start_date)
             print(self.end_date)
-=======
-    def main(self):
-        try:
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
             main_page = self.initiate()
             lapaz_calendar = self.collect_juzgados(response=main_page)
             start_page = self.back_to_past(response=lapaz_calendar)
@@ -487,7 +471,6 @@ class JudiSpider():
             
 
 crawl = JudiSpider()
-<<<<<<< HEAD
 
 schedule.every(48).hours.do(crawl.main)
 while True:
@@ -495,6 +478,3 @@ while True:
     scheduled_for = schedule.next_run()
     print(f"\r [+] Scheduled at {str(scheduled_for)}", end='')
     time.sleep(300)
-=======
-crawl.main()
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392

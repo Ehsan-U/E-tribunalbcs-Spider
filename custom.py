@@ -10,12 +10,6 @@ from isodate import parse_datetime
 from rich.console import Console
 import requests
 from concurrent.futures import ThreadPoolExecutor
-<<<<<<< HEAD
-import schedule
-import time
-
-=======
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
 
 class JudiSpider():
     con = Console()
@@ -42,13 +36,8 @@ class JudiSpider():
         "mulege":"MULEGE",
     }
     end_date = "V8432"
-<<<<<<< HEAD
-    # start_date = "V4900"
-    start_date = "V8370"
-=======
     start_date = "V4900"
-    # start_date = "V8309"
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
+    # start_date = "V8340"
     # start_date = "V6879"
 
     def __init__(self):
@@ -125,15 +114,15 @@ class JudiSpider():
         year = sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table/tr/td[position()=2]/text()").get()[-4:]
         # one month
         for day in sel.xpath("//table[@id='ctl00_ContentPlaceHolder1_Calendar1']/tr[position()>2]/td/a"):
-            # if "26" in day.xpath("./@title").get():
+            # if "27" in day.xpath("./@title").get():
             # 29 de noviembre 2022
             date_ = day.xpath("./@title").get().lower() +" "+ year
             fecha = self.create_fechas(date_)
-                # if fecha == '2022/09/26':
-                # lapaz+8039, lopaz+8040 etc
+            # if fecha == '2017/12/05':
+            # lapaz+8039, lopaz+8040 etc
             day_args = []
             for url, juz_mat_ent_juzid in self.juzgados.items():
-                # if "Primera Sala Unitaria en Materia Civil".lower() in juz_mat_ent_juzid[0].lower():
+                # if "Tercera Sala Unitaria Civil y de Justicia Administrativa (Materia Administrativa)" in juz_mat_ent_juzid[0]:
                 entidad = juz_mat_ent_juzid[-2]
                 juz_id = juz_mat_ent_juzid[-1]
                 day_id = juz_id+entidad+re.search("(?:')([0-9].*)(?:')", day.xpath("./@href").get()).group(1)+juz_mat_ent_juzid[0][-10:]
@@ -144,9 +133,8 @@ class JudiSpider():
                     day_args.append((url, payload, juz_mat_ent_juzid, fecha, self.lock))
             with ThreadPoolExecutor(max_workers=30) as exec:
                 exec.map(self.parse_day, day_args)
-            print(f"\r [+] Fecha: {fecha}",end='')
+            print(f" [+] Fecha: {fecha}")
             # yield responses
-        # return None
         # end-date excluded
         # go to next month (default)
         payload = self.prepare_post(sel,entidad=self.temp_entidad)
@@ -159,11 +147,6 @@ class JudiSpider():
     def parse_day(self, day_args):
         url, payload, juz_mat_ent_juzid, fecha, lock = day_args
         response = self.send_request(url, post={'data':payload})
-<<<<<<< HEAD
-        if not response:
-            response = self.send_request(url, post={'data': payload})
-=======
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
         # count = 0
         # entidad
         entidad = juz_mat_ent_juzid[-2]
@@ -174,7 +157,7 @@ class JudiSpider():
             expediente = ''
             numero = row.xpath("./td[@valign][1]//text()").getall()
             if numero:
-                expediente = " ".join(numero).upper().replace('\n', ' ')
+                expediente = " ".join(numero).upper()
                 # if both expediente,amparo in expediente field then remove amparo
                 if "EXPEDIENTE" in expediente:
                     if "AMPARO" in expediente:
@@ -185,7 +168,7 @@ class JudiSpider():
             # D = TIPO
             tipo = ''
             partes = row.xpath("(./td[@valign])[2]//text()").getall() + row.xpath("(./td[@valign])[3]//text()").getall()
-            joined_partes = " ".join(partes).replace('\n', ' ')
+            joined_partes = " ".join(partes)
             if partes:
                 if "DELITO:" in joined_partes.upper():
                     if re.search("(DELITO:.*?)(?:.-)", joined_partes):
@@ -209,7 +192,7 @@ class JudiSpider():
             partes = row.xpath("./td[@valign][2]//text()").getall()
             if partes:
                 partes_list = partes
-                partes = " ".join(partes).upper().replace('\n',' ')
+                partes = " ".join(partes).upper()
                 if " VS" in partes:
                     orig_partes = partes
                     partes = partes.split(' VS')[0]
@@ -217,9 +200,6 @@ class JudiSpider():
                         # startwith B.C.S. , BAJA CALIFORNIA SUR , - till VS
                         if re.search("(?:B.C.S.\s|BAJA\sCALIFORNIA\sSUR\s|-)(.*?)(?:VS)", orig_partes):
                             actor = re.search("(?:B.C.S.\s|BAJA\sCALIFORNIA\sSUR\s|-)(.*?)(?:VS)", orig_partes).group(1)
-                        if not actor:
-                            if re.search("(.*?)(?:VS)", orig_partes):
-                                actor = re.search("(.*?)(?:VS)", orig_partes).group(1)
                     # startswith - till VS
                     elif "-" in partes:
                         if re.search("(?:[^0-9]-[^0-9])((.|\n)*?)(?:VS)", orig_partes):
@@ -240,13 +220,13 @@ class JudiSpider():
                         actor = re.search("(?:.-)(.*)(?:\(ACUERDO\))", partes).group(1)
                 elif ".-" in partes:
                     actor = partes_list[0].split(".-")[-1]
+
             # F = DEMANDO
             demando = demando_part
-
             acuerdos_part = ''
             partes = row.xpath("./td[@valign][2]//text()").getall()
             if partes and not demando:
-                partes = partes[0].upper().replace('\n', ' ')
+                partes = partes[0].upper()
                 if " VS" in partes:
                     demando = partes.split(" VS")[-1]
                     if ".-" in demando:
@@ -398,9 +378,6 @@ class JudiSpider():
 
     def find_materia(self, link_text):
         link_text = link_text.lower()
-        if link_text == "Tercera Sala Unitaria Civil y de Justicia Administrativa (Materia Administrativa)".lower():
-            materia = 'administrativa'
-            return materia.upper()
         laboral = ['laboral']
         civil = ['mercantil', 'civil', 'materia civil', 'civil y familiar']
         familiar = ['familiar', 'consignaciones']
@@ -453,27 +430,8 @@ class JudiSpider():
                 print("error in db query")
                 return None
 
-<<<<<<< HEAD
-
-    def cal_start_end(self):
-        url = 'https://e-tribunalbcs.mx/AccesoLibre/LiAcuerdosBusqueda.aspx?MpioId=3&MpioDescrip=La%20Paz&JuzId=1&JuzDescrip=PRIMERO%20MERCANTIL&MateriaID=C&MateriaDescrip=Mercantil'
-        response = self.send_request(url, get=True)
-        sel = scrapy.Selector(text=response.text)
-        self.start_date = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[1]/@href").get()
-        self.start_date = re.search(r"(?:')(V[0-9].*)(?:')", self.start_date).group(1)
-        self.end_date = sel.xpath("(//table[@id='ctl00_ContentPlaceHolder1_Calendar1']//table//a)[2]/@href").get()
-        self.end_date = re.search(r"(?:')(V[0-9].*)(?:')", self.end_date).group(1)
-        # update the self.start & self.end
-
     def main(self):
         try:
-            self.cal_start_end()
-            print(self.start_date)
-            print(self.end_date)
-=======
-    def main(self):
-        try:
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392
             main_page = self.initiate()
             lapaz_calendar = self.collect_juzgados(response=main_page)
             start_page = self.back_to_past(response=lapaz_calendar)
@@ -487,14 +445,4 @@ class JudiSpider():
             
 
 crawl = JudiSpider()
-<<<<<<< HEAD
-
-schedule.every(48).hours.do(crawl.main)
-while True:
-    schedule.run_pending()
-    scheduled_for = schedule.next_run()
-    print(f"\r [+] Scheduled at {str(scheduled_for)}", end='')
-    time.sleep(300)
-=======
 crawl.main()
->>>>>>> 6de88ee0bd9746ce5cf723972e9fab7d257c8392

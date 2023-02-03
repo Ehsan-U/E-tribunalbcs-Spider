@@ -44,9 +44,6 @@ class JudiSpider():
     # start_date = "V6879"
 
     def __init__(self):
-        self.local_db = open("localdb.txt",'a+')
-        self.local_db.seek(0)
-        self.days_gone = self.local_db.read().split('\n')
         self.collection = 'Judicial_Baja_California_Sur'
         self.MONGODB_HOST = '104.225.140.236'
         self.MONGODB_PORT = '27017'
@@ -453,8 +450,12 @@ class JudiSpider():
         self.end_date = re.search(r"(?:')(V[0-9].*)(?:')", self.end_date).group(1)
         # update the self.start & self.end
 
-    def main(self):
+
+    def main_func(self):
         try:
+            self.local_db = open("localdb.txt",'a+')
+            self.local_db.seek(0)
+            self.days_gone = self.local_db.read().split('\n')
             self.cal_start_end()
             print(self.start_date)
             print(self.end_date)
@@ -466,15 +467,19 @@ class JudiSpider():
             self.parse_juzgado(response=start_page)
         except (KeyboardInterrupt, Exception):
             self.con.print_exception()
-        self.client.close()
-        self.local_db.close()
+        finally:
+            self.client.close()
+            self.local_db.close()
             
 
 crawl = JudiSpider()
+crawl.main_func()
 
-schedule.every(48).hours.do(crawl.main)
+schedule.every(48).hours.do(crawl.main_func)
 while True:
     schedule.run_pending()
     scheduled_for = schedule.next_run()
     print(f"\r [+] Scheduled at {str(scheduled_for)}", end='')
-    time.sleep(300)
+    time.sleep(3600)
+
+
